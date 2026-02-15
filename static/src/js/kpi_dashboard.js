@@ -12,7 +12,6 @@ class SaleKpiDashboard extends Component {
     setup() {
         this.actionService = useService("action");
         this.orm = useService("orm");
-        this.user = useService("user");
 
         const raw = this.props.record.data[this.props.name];
         const data = this._parse(raw);
@@ -25,13 +24,24 @@ class SaleKpiDashboard extends Component {
 
         onWillStart(async () => {
             try {
-                const hasGroup = await this.user.hasGroup(
-                    "sale_order_kpi_dashboard.group_margin_viewer"
+                const result = await this.orm.call(
+                    "res.users",
+                    "has_group",
+                    [this.props.record.model.user.userId, "sale_order_kpi_dashboard.group_margin_viewer"],
                 );
-                this.state.hasMarginAccess = hasGroup;
+                this.state.hasMarginAccess = result;
             } catch (e) {
-                console.warn("KPI Dashboard: margin group check failed", e);
-                this.state.hasMarginAccess = false;
+                try {
+                    const result = await this.orm.call(
+                        "res.users",
+                        "has_group",
+                        ["sale_order_kpi_dashboard.group_margin_viewer"],
+                    );
+                    this.state.hasMarginAccess = result;
+                } catch (e2) {
+                    console.warn("KPI Dashboard: margin group check failed", e2);
+                    this.state.hasMarginAccess = false;
+                }
             }
             this.state.loaded = true;
         });
@@ -120,7 +130,6 @@ class SaleKpiDashboard extends Component {
         }
     }
 
-    // ── Formatters ─────────────────────────────────────────
     fmt(val) {
         if (val === undefined || val === null) return "0.00";
         return parseFloat(val).toLocaleString("es-MX", {
@@ -149,7 +158,6 @@ class SaleKpiDashboard extends Component {
         });
     }
 
-    // ── Health Score ───────────────────────────────────────
     getHealthClass(score) {
         if (score >= 80) return "kpi-health-excellent";
         if (score >= 60) return "kpi-health-good";
@@ -180,7 +188,6 @@ class SaleKpiDashboard extends Component {
         return c - (score / 100) * c;
     }
 
-    // ── Fulfillment ────────────────────────────────────────
     getFulfillmentFill(pct) {
         if (pct >= 100) return "kpi-fill-green";
         if (pct > 50) return "kpi-fill-blue";
@@ -192,7 +199,6 @@ class SaleKpiDashboard extends Component {
         return Math.min(this.state.logistics.overall_fulfillment, 100);
     }
 
-    // ── Deviation ──────────────────────────────────────────
     getDeviationClass(days) {
         if (days > 0) return "kpi-deviation-positive";
         if (days < 0) return "kpi-deviation-negative";
@@ -209,7 +215,6 @@ class SaleKpiDashboard extends Component {
         return this.state.logistics.deviation_days > 0;
     }
 
-    // ── DSO ────────────────────────────────────────────────
     getDsoAccent() {
         var d = this.state.payment.dso;
         if (d <= 30) return "kpi-accent-green";
@@ -224,7 +229,6 @@ class SaleKpiDashboard extends Component {
         return "kpi-icon-red";
     }
 
-    // ── Payment ────────────────────────────────────────────
     getPaymentBarWidth() {
         var t = this.state.payment.amount_total;
         if (t <= 0) return 0;
@@ -235,7 +239,6 @@ class SaleKpiDashboard extends Component {
         return this.state.payment.amount_pending > 0;
     }
 
-    // ── Margin ─────────────────────────────────────────────
     getMarginAccent() {
         var p = this.state.margin.margin_pct;
         if (p >= 20) return "kpi-accent-green";
@@ -276,12 +279,10 @@ class SaleKpiDashboard extends Component {
         return Math.abs(this.state.margin.return_margin_impact);
     }
 
-    // ── Fragmentation ──────────────────────────────────────
     isFragHigh() {
         return this.state.inventory.fragmentation_index > 15;
     }
 
-    // ── Risk ───────────────────────────────────────────────
     hasRiskDetails() {
         return (
             this.state.client.credit_risk_details &&
@@ -289,7 +290,6 @@ class SaleKpiDashboard extends Component {
         );
     }
 
-    // ── Navigation ─────────────────────────────────────────
     async openPayment(id) {
         await this.actionService.doAction({
             type: "ir.actions.act_window",
