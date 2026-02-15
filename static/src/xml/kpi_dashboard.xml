@@ -1,0 +1,360 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<templates xml:space="preserve">
+
+    <t t-name="sale_order_kpi_dashboard.SaleKpiDashboard">
+        <div class="kpi-root" t-if="state.loaded">
+
+            <!-- ═══════════ HEADER + HEALTH SCORE ═══════════ -->
+            <div class="kpi-header">
+                <div class="kpi-header-left">
+                    <div class="kpi-header-icon">
+                        <i class="fa fa-dashboard"/>
+                    </div>
+                    <div>
+                        <div class="kpi-header-title">Strategic KPI Dashboard</div>
+                        <div class="kpi-header-subtitle">Indicadores clave de rendimiento de la orden</div>
+                    </div>
+                </div>
+                <!-- KPI 12: Order Health Score -->
+                <div t-attf-class="kpi-health-badge #{getHealthClass(state.order_health_score)}">
+                    <span>Order Health</span>
+                    <span class="kpi-health-score-num"><t t-esc="fmtInt(state.order_health_score)"/></span>
+                    <span>/100</span>
+                </div>
+            </div>
+
+            <!-- ═══════════ ROW 1: HEALTH GAUGE + FULFILLMENT + DSO + LEAD TIME ═══════════ -->
+            <div class="kpi-section-row-4">
+
+                <!-- KPI 12 detail: Health Gauge -->
+                <div class="kpi-card">
+                    <div class="kpi-card-accent kpi-accent-indigo"/>
+                    <div class="kpi-card-top">
+                        <div class="kpi-card-icon-wrap kpi-icon-indigo">
+                            <i class="fa fa-heartbeat"/>
+                        </div>
+                        <span class="kpi-card-number-tag">KPI 12</span>
+                    </div>
+                    <div class="kpi-card-label">Salud de la Orden</div>
+                    <div class="kpi-gauge-wrap">
+                        <div class="kpi-gauge-ring">
+                            <svg viewBox="0 0 64 64">
+                                <circle class="kpi-gauge-bg" cx="32" cy="32" r="27"/>
+                                <circle class="kpi-gauge-fill"
+                                    cx="32" cy="32" r="27"
+                                    t-att-stroke="getHealthColor(state.order_health_score)"
+                                    t-attf-stroke-dasharray="#{getGaugeDasharray()}"
+                                    t-attf-stroke-dashoffset="#{getGaugeDashoffset(state.order_health_score)}"/>
+                            </svg>
+                            <div class="kpi-gauge-center">
+                                <t t-esc="fmtInt(state.order_health_score)"/>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="kpi-gauge-label"><t t-esc="getHealthLabel(state.order_health_score)"/></div>
+                            <div class="kpi-gauge-detail">Margen + Riesgo + DSO + Logística + Devoluciones</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KPI 7: Lead Time Total -->
+                <div class="kpi-card">
+                    <div class="kpi-card-accent kpi-accent-blue"/>
+                    <div class="kpi-card-top">
+                        <div class="kpi-card-icon-wrap kpi-icon-blue">
+                            <i class="fa fa-truck"/>
+                        </div>
+                        <span class="kpi-card-number-tag">KPI 7</span>
+                    </div>
+                    <div class="kpi-card-label">Lead Time Total</div>
+                    <div class="kpi-card-value">
+                        <t t-esc="state.logistics.lead_time_days"/> <span style="font-size:13px;font-weight:500;color:#6B7280;">días</span>
+                    </div>
+                    <div class="kpi-card-sub">Confirmación → Última entrega</div>
+                    <div class="kpi-progress-bar">
+                        <div t-attf-class="kpi-progress-fill #{getFulfillmentColor(state.logistics.overall_fulfillment)}"
+                             t-attf-style="width:#{Math.min(state.logistics.overall_fulfillment, 100)}%"/>
+                    </div>
+                    <div class="kpi-card-sub" style="margin-top:4px;">
+                        Cumplimiento: <b><t t-esc="fmtPct(state.logistics.overall_fulfillment)"/>%</b>
+                    </div>
+                </div>
+
+                <!-- KPI 8: Desviación vs Fecha Prometida -->
+                <div class="kpi-card">
+                    <div t-attf-class="kpi-card-accent #{state.logistics.deviation_days > 0 ? 'kpi-accent-red' : 'kpi-accent-green'}"/>
+                    <div class="kpi-card-top">
+                        <div t-attf-class="kpi-card-icon-wrap #{state.logistics.deviation_days > 0 ? 'kpi-icon-red' : 'kpi-icon-green'}">
+                            <i class="fa fa-calendar-check-o"/>
+                        </div>
+                        <span class="kpi-card-number-tag">KPI 8</span>
+                    </div>
+                    <div class="kpi-card-label">Desviación vs Promesa</div>
+                    <div t-attf-class="kpi-card-value #{getDeviationClass(state.logistics.deviation_days)}">
+                        <t t-esc="getDeviationText(state.logistics.deviation_days)"/>
+                    </div>
+                    <div class="kpi-card-sub">vs fecha comprometida</div>
+                </div>
+
+                <!-- KPI 4: DSO -->
+                <div class="kpi-card">
+                    <div t-attf-class="kpi-card-accent #{getDsoColor(state.payment.dso)}"/>
+                    <div class="kpi-card-top">
+                        <div t-attf-class="kpi-card-icon-wrap #{getDsoIconColor(state.payment.dso)}">
+                            <i class="fa fa-hourglass-half"/>
+                        </div>
+                        <span class="kpi-card-number-tag">KPI 4</span>
+                    </div>
+                    <div class="kpi-card-label">DSO (Días de Cartera)</div>
+                    <div class="kpi-card-value">
+                        <t t-esc="fmtPct(state.payment.dso)"/> <span style="font-size:13px;font-weight:500;color:#6B7280;">días</span>
+                    </div>
+                    <div class="kpi-card-sub">Promedio facturación → pago</div>
+                </div>
+            </div>
+
+            <!-- ═══════════ SECTION: PAGOS Y COBRANZA ═══════════ -->
+            <div class="kpi-section-divider">
+                <span class="kpi-section-divider-label">Pagos y Cobranza</span>
+                <div class="kpi-section-divider-line"/>
+            </div>
+
+            <div class="kpi-section-row-4">
+                <!-- Pagado -->
+                <div class="kpi-card">
+                    <div class="kpi-card-accent kpi-accent-green"/>
+                    <div class="kpi-card-top">
+                        <div class="kpi-card-icon-wrap kpi-icon-green">
+                            <i class="fa fa-check-circle"/>
+                        </div>
+                    </div>
+                    <div class="kpi-card-label">Total Pagado</div>
+                    <div class="kpi-card-value">
+                        <t t-esc="state.currency"/><t t-esc="fmt(state.payment.total_paid)"/>
+                    </div>
+                    <div class="kpi-card-sub">
+                        de <t t-esc="state.currency"/><t t-esc="fmt(state.payment.amount_total)"/>
+                    </div>
+                    <div class="kpi-progress-bar">
+                        <div class="kpi-progress-fill kpi-fill-green"
+                             t-attf-style="width:#{state.payment.amount_total > 0 ? Math.min((state.payment.total_paid / state.payment.amount_total) * 100, 100) : 0}%"/>
+                    </div>
+                </div>
+
+                <!-- Pendiente -->
+                <div class="kpi-card">
+                    <div t-attf-class="kpi-card-accent #{getPendingColor(state.payment.amount_pending)}"/>
+                    <div class="kpi-card-top">
+                        <div t-attf-class="kpi-card-icon-wrap #{getPendingIconColor(state.payment.amount_pending)}">
+                            <i t-attf-class="fa #{state.payment.amount_pending > 0 ? 'fa-clock-o' : 'fa-check'}"/>
+                        </div>
+                    </div>
+                    <div class="kpi-card-label">Pendiente por Pagar</div>
+                    <div t-attf-class="kpi-card-value #{state.payment.amount_pending > 0 ? 'kpi-deviation-positive' : ''}">
+                        <t t-esc="state.currency"/><t t-esc="fmt(state.payment.amount_pending)"/>
+                    </div>
+                </div>
+
+                <!-- KPI 5: Exposición Total -->
+                <div class="kpi-card">
+                    <div class="kpi-card-accent kpi-accent-orange"/>
+                    <div class="kpi-card-top">
+                        <div class="kpi-card-icon-wrap kpi-icon-orange">
+                            <i class="fa fa-building"/>
+                        </div>
+                        <span class="kpi-card-number-tag">KPI 5</span>
+                    </div>
+                    <div class="kpi-card-label">Exposición del Cliente</div>
+                    <div class="kpi-card-value kpi-card-value-sm">
+                        <t t-esc="state.currency"/><t t-esc="fmt(state.client.client_exposure)"/>
+                    </div>
+                    <div class="kpi-card-sub">
+                        <t t-esc="state.client.partner_name"/> — todas las órdenes
+                    </div>
+                </div>
+
+                <!-- KPI 11: Cobro Proyectado -->
+                <div class="kpi-card">
+                    <div class="kpi-card-accent kpi-accent-cyan"/>
+                    <div class="kpi-card-top">
+                        <div class="kpi-card-icon-wrap kpi-icon-cyan">
+                            <i class="fa fa-line-chart"/>
+                        </div>
+                        <span class="kpi-card-number-tag">KPI 11</span>
+                    </div>
+                    <div class="kpi-card-label">Cobro Total Proyectado</div>
+                    <div class="kpi-card-value kpi-card-value-sm">
+                        <t t-esc="state.projections.projected_collection_date"/>
+                    </div>
+                    <div class="kpi-card-sub">
+                        ~<t t-esc="state.projections.projected_collection_days"/> días restantes
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════ SECTION: RIESGO CREDITICIO ═══════════ -->
+            <div class="kpi-section-divider">
+                <span class="kpi-section-divider-label">Análisis de Riesgo Crediticio</span>
+                <div class="kpi-section-divider-line"/>
+            </div>
+
+            <div class="kpi-section-row-2">
+                <!-- KPI 6: Índice de Riesgo -->
+                <div class="kpi-card">
+                    <div class="kpi-card-accent" t-attf-style="background-color:#{state.client.credit_risk_color}"/>
+                    <div class="kpi-card-top">
+                        <div class="kpi-card-icon-wrap" t-attf-style="background:#{state.client.credit_risk_color}15;color:#{state.client.credit_risk_color}">
+                            <i class="fa fa-shield"/>
+                        </div>
+                        <span class="kpi-card-number-tag">KPI 6</span>
+                    </div>
+                    <div class="kpi-card-label">Índice de Riesgo Crediticio</div>
+                    <div class="kpi-card-value">
+                        <t t-esc="state.client.credit_risk_score"/><span style="font-size:14px;font-weight:500;color:#6B7280;"> /100</span>
+                    </div>
+                    <div class="kpi-risk-badge" t-attf-style="background:#{state.client.credit_risk_color}15;color:#{state.client.credit_risk_color}">
+                        <div class="kpi-risk-dot" t-attf-style="background:#{state.client.credit_risk_color}"/>
+                        <t t-esc="state.client.credit_risk_label"/>
+                    </div>
+                    <t t-if="state.client.credit_risk_details.length > 0">
+                        <div class="kpi-risk-details">
+                            <t t-foreach="state.client.credit_risk_details" t-as="detail" t-key="detail_index">
+                                <div class="kpi-risk-detail-item"><t t-esc="detail"/></div>
+                            </t>
+                        </div>
+                    </t>
+                </div>
+
+                <!-- Devoluciones + Fragmentación -->
+                <div class="kpi-card">
+                    <div class="kpi-card-accent kpi-accent-amber"/>
+                    <div class="kpi-card-top">
+                        <div class="kpi-card-icon-wrap kpi-icon-amber">
+                            <i class="fa fa-undo"/>
+                        </div>
+                    </div>
+                    <div class="kpi-card-label">Devoluciones e Inventario</div>
+                    <div style="display:flex;gap:20px;margin-top:8px;">
+                        <div style="flex:1;">
+                            <div style="font-size:10px;color:#6B7280;font-weight:600;text-transform:uppercase;">Devuelto</div>
+                            <div style="font-size:18px;font-weight:700;color:#F59E0B;">
+                                <t t-esc="state.currency"/><t t-esc="fmt(state.returns.total_returned_revenue)"/>
+                            </div>
+                            <div style="font-size:10px;color:#9CA3AF;">
+                                <t t-esc="fmtQty(state.returns.total_returned_qty)"/> uds
+                            </div>
+                        </div>
+                        <div style="width:1px;background:#E5E7EB;"/>
+                        <div style="flex:1;">
+                            <div style="font-size:10px;color:#6B7280;font-weight:600;text-transform:uppercase;">
+                                Fragmentación Lote <span class="kpi-card-number-tag">KPI 10</span>
+                            </div>
+                            <div style="font-size:18px;font-weight:700;" t-attf-class="#{state.inventory.fragmentation_index > 15 ? 'kpi-deviation-positive' : ''}">
+                                <t t-esc="fmtPct(state.inventory.fragmentation_index)"/>%
+                            </div>
+                            <div style="font-size:10px;color:#9CA3AF;">
+                                m² remanentes pequeños
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════════ SECTION: MÁRGENES (RESTRINGIDO) ═══════════ -->
+            <div class="kpi-section-divider">
+                <span class="kpi-section-divider-label">
+                    <i class="fa fa-lock" style="margin-right:4px;"/> Margen y Rentabilidad
+                </span>
+                <div class="kpi-section-divider-line"/>
+            </div>
+
+            <t t-if="state.hasMarginAccess">
+                <div class="kpi-section-row-4">
+                    <!-- KPI 1: Margen Bruto Real -->
+                    <div class="kpi-card">
+                        <div t-attf-class="kpi-card-accent #{getMarginColor(state.margin.margin_pct)}"/>
+                        <div class="kpi-card-top">
+                            <div t-attf-class="kpi-card-icon-wrap #{getMarginIconColor(state.margin.margin_pct)}">
+                                <i class="fa fa-dollar"/>
+                            </div>
+                            <span class="kpi-card-number-tag">KPI 1</span>
+                        </div>
+                        <div class="kpi-card-label">Margen Bruto Real</div>
+                        <div t-attf-class="kpi-card-value #{state.margin.gross_margin &lt; 0 ? 'kpi-deviation-positive' : ''}">
+                            <t t-esc="state.currency"/><t t-esc="fmt(state.margin.gross_margin)"/>
+                        </div>
+                        <div class="kpi-card-sub">
+                            Venta neta: <t t-esc="state.currency"/><t t-esc="fmt(state.margin.net_revenue)"/>
+                            — Costo: <t t-esc="state.currency"/><t t-esc="fmt(state.margin.net_cost)"/>
+                        </div>
+                    </div>
+
+                    <!-- KPI 2: % Margen Real -->
+                    <div class="kpi-card">
+                        <div t-attf-class="kpi-card-accent #{getMarginColor(state.margin.margin_pct)}"/>
+                        <div class="kpi-card-top">
+                            <div t-attf-class="kpi-card-icon-wrap #{getMarginIconColor(state.margin.margin_pct)}">
+                                <i class="fa fa-percent"/>
+                            </div>
+                            <span class="kpi-card-number-tag">KPI 2</span>
+                        </div>
+                        <div class="kpi-card-label">% Margen Real</div>
+                        <div t-attf-class="kpi-card-value #{state.margin.margin_pct &lt; 0 ? 'kpi-deviation-positive' : ''}">
+                            <t t-esc="fmtPct(state.margin.margin_pct)"/>%
+                        </div>
+                        <div class="kpi-progress-bar">
+                            <div t-attf-class="kpi-progress-fill #{state.margin.margin_pct >= 20 ? 'kpi-fill-green' : state.margin.margin_pct >= 10 ? 'kpi-fill-blue' : state.margin.margin_pct >= 0 ? 'kpi-fill-amber' : 'kpi-fill-red'}"
+                                 t-attf-style="width:#{Math.max(0, Math.min(state.margin.margin_pct, 50)) * 2}%"/>
+                        </div>
+                    </div>
+
+                    <!-- KPI 3: Impacto Devoluciones en Margen -->
+                    <div class="kpi-card">
+                        <div t-attf-class="kpi-card-accent #{state.margin.return_margin_impact > 0 ? 'kpi-accent-red' : 'kpi-accent-green'}"/>
+                        <div class="kpi-card-top">
+                            <div t-attf-class="kpi-card-icon-wrap #{state.margin.return_margin_impact > 0 ? 'kpi-icon-red' : 'kpi-icon-green'}">
+                                <i class="fa fa-exchange"/>
+                            </div>
+                            <span class="kpi-card-number-tag">KPI 3</span>
+                        </div>
+                        <div class="kpi-card-label">Impacto Devol. en Margen</div>
+                        <div class="kpi-card-value kpi-card-value-sm">
+                            -<t t-esc="state.currency"/><t t-esc="fmt(Math.abs(state.margin.return_margin_impact))"/>
+                        </div>
+                        <div class="kpi-card-sub">Margen perdido por devoluciones</div>
+                    </div>
+
+                    <!-- KPI 9: Margen por m² -->
+                    <div class="kpi-card">
+                        <div t-attf-class="kpi-card-accent #{getMarginColor(state.margin.margin_pct)}"/>
+                        <div class="kpi-card-top">
+                            <div class="kpi-card-icon-wrap kpi-icon-purple">
+                                <i class="fa fa-th"/>
+                            </div>
+                            <span class="kpi-card-number-tag">KPI 9</span>
+                        </div>
+                        <div class="kpi-card-label">Margen por m²</div>
+                        <div class="kpi-card-value kpi-card-value-sm">
+                            <t t-esc="state.currency"/><t t-esc="fmt(state.margin.margin_per_sqm)"/>
+                        </div>
+                        <div class="kpi-card-sub">por m² vendido en esta orden</div>
+                    </div>
+                </div>
+            </t>
+
+            <t t-if="!state.hasMarginAccess">
+                <div class="kpi-card" style="text-align:center;padding:32px;">
+                    <div class="kpi-restricted-msg">
+                        <i class="fa fa-lock kpi-restricted-icon"/>
+                        <div class="kpi-restricted-text">
+                            Los KPIs de margen y rentabilidad requieren el permiso<br/>
+                            <b>"Ver Márgenes y Rentabilidad"</b> (Ventas → KPI Dashboard)
+                        </div>
+                    </div>
+                </div>
+            </t>
+
+        </div>
+    </t>
+
+</templates>

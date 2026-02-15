@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="module_category_sale_kpi" model="ir.module.category">
+        <field name="name">KPI Dashboard</field>
+        <field name="sequence">50</field>
+    </record>
+
+    <record id="group_margin_viewer" model="res.groups">
+        <field name="name">Ver Márgenes y Rentabilidad</field>
+        <field name="comment">Usuarios con este permiso pueden ver los KPIs de margen bruto, % margen, margen por m² e impacto de devoluciones en margen dentro del dashboard de la orden de venta.</field>
+        <field name="category_id" ref="sale.module_category_sales"/>
+    </record>
+
+</odoo>

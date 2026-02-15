@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <record id="view_order_form_kpi_dashboard" model="ir.ui.view">
+        <field name="name">sale.order.form.kpi.dashboard</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale.view_order_form"/>
+        <field name="priority">70</field>
+        <field name="arch" type="xml">
+
+            <!-- KPI Dashboard debajo del notebook -->
+            <xpath expr="//notebook" position="after">
+                <div class="o_group" style="width: 100%;">
+                    <field name="kpi_dashboard_data" widget="sale_kpi_dashboard" nolabel="1"/>
+                </div>
+            </xpath>
+
+        </field>
+    </record>
+
+</odoo>
