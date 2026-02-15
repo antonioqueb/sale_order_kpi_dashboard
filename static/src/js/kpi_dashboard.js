@@ -50,6 +50,7 @@ class SaleKpiDashboard extends Component {
             },
             client: {
                 client_exposure: 0,
+                client_exposure_currency: "$",
                 credit_risk_score: 100,
                 credit_risk_label: "N/A",
                 credit_risk_color: "#9CA3AF",

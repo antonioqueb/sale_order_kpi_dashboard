@@ -11,7 +11,7 @@
                 <i class="fa fa-dashboard"/>
             </div>
             <div>
-                <div class="kpi-header-title">Strategic KPI Dashboard</div>
+                <div class="kpi-header-title">KPI Dashboard</div>
                 <div class="kpi-header-subtitle">Indicadores clave de rendimiento de la orden</div>
             </div>
         </div>
@@ -156,7 +156,7 @@
             </div>
         </div>
 
-        <!-- KPI 5: Exposición Total -->
+        <!-- KPI 5: Exposición Total (siempre MXN) -->
         <div class="kpi-card">
             <div class="kpi-card-accent kpi-accent-orange"/>
             <div class="kpi-card-top">
@@ -165,9 +165,9 @@
                 </div>
                 <span class="kpi-card-number-tag">KPI 5</span>
             </div>
-            <div class="kpi-card-label">Exposición del Cliente</div>
+            <div class="kpi-card-label">Exposición del Cliente (MXN)</div>
             <div class="kpi-card-value kpi-card-value-sm">
-                <t t-esc="state.currency"/><t t-esc="fmt(state.client.client_exposure)"/>
+                <t t-esc="state.client.client_exposure_currency"/><t t-esc="fmt(state.client.client_exposure)"/>
             </div>
             <div class="kpi-card-sub">
                 <t t-esc="state.client.partner_name"/> — todas las órdenes

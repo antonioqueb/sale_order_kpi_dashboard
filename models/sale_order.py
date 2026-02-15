@@ -63,7 +63,7 @@ class SaleOrder(models.Model):
         total_returned_revenue = 0.0
         total_ordered_qty = 0.0
         total_delivered_qty = 0.0
-        total_sqm_ordered = 0.0   # for m² margin
+        total_sqm_ordered = 0.0
 
         for line in order.order_line.filtered(lambda l: not l.display_type):
             qty_ordered = line.product_uom_qty
@@ -74,7 +74,6 @@ class SaleOrder(models.Model):
             revenue_line = qty_delivered * price
             cost_line = qty_delivered * cost
 
-            # Returns
             returned_qty = 0.0
             out_moves = line.move_ids.filtered(
                 lambda m: m.state == 'done' and m.picking_code == 'outgoing'
@@ -93,7 +92,7 @@ class SaleOrder(models.Model):
             total_returned_cost += returned_qty * cost
             total_ordered_qty += qty_ordered
             total_delivered_qty += qty_delivered
-            total_sqm_ordered += qty_ordered  # asumimos UoM = m² para mármol
+            total_sqm_ordered += qty_ordered
 
         # ── KPI 1: Margen Bruto Real ──────────────────────────────
         net_revenue = total_revenue - total_returned_revenue
@@ -143,8 +142,6 @@ class SaleOrder(models.Model):
         # ── KPI 4: DSO (Días de Cartera por Orden) ───────────────
         dso = 0.0
         if invoice_dates and payment_dates:
-            avg_inv = sum((d - fields.Date.today()).days for d in invoice_dates) / len(invoice_dates)
-            # Calc real: promedio días entre cada factura y sus pagos
             dso_days = []
             for invoice in invoices:
                 if not invoice.invoice_date:
@@ -156,21 +153,30 @@ class SaleOrder(models.Model):
                         dso_days.append(max(delta, 0))
             dso = sum(dso_days) / len(dso_days) if dso_days else 0.0
         elif invoice_dates and not payment_dates:
-            # No pagos aún, DSO = días desde primera factura
             earliest = min(invoice_dates)
             dso = (fields.Date.today() - earliest).days
 
-        # ── KPI 5: Exposición Total del Cliente ───────────────────
+        # ── KPI 5: Exposición Total del Cliente (siempre en MXN) ──
         partner = order.partner_id.commercial_partner_id or order.partner_id
         client_open_orders = self.env['sale.order'].search([
             ('partner_id.commercial_partner_id', '=', partner.id),
             ('state', 'in', ['sale', 'done']),
         ])
+        mxn = self.env.ref('base.MXN', raise_if_not_found=False)
+        target_currency = mxn or order.currency_id
         client_exposure = 0.0
         for o in client_open_orders:
             inv_posted = o.invoice_ids.filtered(lambda i: i.state == 'posted' and i.move_type == 'out_invoice')
-            residual = sum(inv_posted.mapped('amount_residual'))
-            client_exposure += residual
+            for inv in inv_posted:
+                residual = inv.amount_residual
+                if inv.currency_id != target_currency:
+                    residual = inv.currency_id._convert(
+                        residual,
+                        target_currency,
+                        inv.company_id,
+                        inv.invoice_date or fields.Date.today(),
+                    )
+                client_exposure += residual
 
         # ── KPI 6: Índice de Riesgo de Crédito ───────────────────
         credit_risk = self._compute_credit_risk_index(partner, client_exposure)
@@ -222,7 +228,6 @@ class SaleOrder(models.Model):
         currency_sym = order.currency_id.symbol or '$'
 
         return {
-            # Margin KPIs (restricted)
             'margin': {
                 'gross_margin': round(gross_margin, 2),
                 'margin_pct': round(margin_pct, 1),
@@ -231,7 +236,6 @@ class SaleOrder(models.Model):
                 'net_revenue': round(net_revenue, 2),
                 'net_cost': round(net_cost, 2),
             },
-            # Payment KPIs
             'payment': {
                 'dso': round(dso, 1),
                 'total_paid': round(total_paid, 2),
@@ -239,16 +243,15 @@ class SaleOrder(models.Model):
                 'amount_total': order.amount_total,
                 'payments': payments_data,
             },
-            # Client Risk
             'client': {
                 'client_exposure': round(client_exposure, 2),
+                'client_exposure_currency': target_currency.symbol or '$',
                 'credit_risk_score': credit_risk['score'],
                 'credit_risk_label': credit_risk['label'],
                 'credit_risk_color': credit_risk['color'],
                 'credit_risk_details': credit_risk['details'],
                 'partner_name': partner.name,
             },
-            # Logistics
             'logistics': {
                 'lead_time_days': lead_time_days,
                 'deviation_days': deviation_days,
@@ -256,21 +259,17 @@ class SaleOrder(models.Model):
                 'total_ordered': total_ordered_qty,
                 'total_delivered': total_delivered_qty,
             },
-            # Returns
             'returns': {
                 'total_returned_qty': total_returned_qty,
                 'total_returned_revenue': round(total_returned_revenue, 2),
             },
-            # Inventory
             'inventory': {
                 'fragmentation_index': round(fragmentation_index, 1),
             },
-            # Projections
             'projections': {
                 'projected_collection_date': projected_collection['date_str'],
                 'projected_collection_days': projected_collection['days'],
             },
-            # Composite
             'order_health_score': round(health_score, 0),
             'currency': currency_sym,
             'has_margin_access': self.env.user.has_group('sale_order_kpi_dashboard.group_margin_viewer'),
@@ -280,10 +279,9 @@ class SaleOrder(models.Model):
     #  HELPER: Credit Risk Index
     # ══════════════════════════════════════════════════════════════
     def _compute_credit_risk_index(self, partner, exposure):
-        score = 100  # starts perfect
+        score = 100
         details = []
 
-        # Factor 1: Overdue invoices
         overdue_invoices = self.env['account.move'].search([
             ('partner_id.commercial_partner_id', '=', partner.id),
             ('state', '=', 'posted'),
@@ -299,7 +297,6 @@ class SaleOrder(models.Model):
             score -= penalty
             details.append(f"{overdue_count} factura(s) vencida(s) (${overdue_amount:,.2f})")
 
-        # Factor 2: Average days overdue
         if overdue_invoices:
             avg_overdue = sum(
                 (fields.Date.today() - inv.invoice_date_due).days
@@ -318,7 +315,6 @@ class SaleOrder(models.Model):
                 score -= 5
                 details.append(f"Promedio {avg_overdue:.0f} días de atraso")
 
-        # Factor 3: Credit limit usage
         credit_limit = partner.credit_limit if hasattr(partner, 'credit_limit') and partner.credit_limit else 0
         if credit_limit > 0:
             usage = exposure / credit_limit
@@ -333,7 +329,6 @@ class SaleOrder(models.Model):
                 score -= 5
                 details.append("Sin límite de crédito definido")
 
-        # Factor 4: Historical payment pattern (last 12 months)
         twelve_months_ago = fields.Date.today() - timedelta(days=365)
         paid_invoices = self.env['account.move'].search([
             ('partner_id.commercial_partner_id', '=', partner.id),
@@ -346,7 +341,6 @@ class SaleOrder(models.Model):
             late_count = 0
             for inv in paid_invoices:
                 if inv.invoice_date_due:
-                    # Check reconciliation dates
                     last_payment_date = None
                     for ml in inv.line_ids:
                         for partial in ml.matched_credit_ids:
@@ -387,18 +381,12 @@ class SaleOrder(models.Model):
     #  HELPER: Lot Fragmentation
     # ══════════════════════════════════════════════════════════════
     def _compute_lot_fragmentation(self):
-        """
-        Índice de Fragmentación de Lote:
-        % de m² remanentes pequeños en los lotes usados para esta orden
-        vs m² originales del lote.
-        """
         self.ensure_one()
         done_moves = self.order_line.mapped('move_ids').filtered(
             lambda m: m.state == 'done' and m.picking_code == 'outgoing'
         )
         lot_ids = done_moves.mapped('lot_ids')
         if not lot_ids:
-            # Try move_line_ids for older lot assignment
             lot_ids = done_moves.mapped('move_line_ids.lot_id')
 
         if not lot_ids:
@@ -406,16 +394,14 @@ class SaleOrder(models.Model):
 
         total_original = 0.0
         total_remnant_small = 0.0
-        threshold_sqm = 1.0  # pieces < 1 m² = fragment
+        threshold_sqm = 1.0
 
         for lot in lot_ids:
-            # Get current quant for this lot
             quants = self.env['stock.quant'].search([
                 ('lot_id', '=', lot.id),
                 ('location_id.usage', '=', 'internal'),
             ])
             current_qty = sum(quants.mapped('quantity'))
-            # Estimate original qty from moves
             outgoing = self.env['stock.move.line'].search([
                 ('lot_id', '=', lot.id),
                 ('state', '=', 'done'),
@@ -444,7 +430,6 @@ class SaleOrder(models.Model):
         if amount_pending <= 0:
             return {'date_str': 'Cobrado', 'days': 0}
 
-        # Use historical DSO of this partner
         twelve_months_ago = fields.Date.today() - timedelta(days=365)
         paid_invoices = self.env['account.move'].search([
             ('partner_id.commercial_partner_id', '=', partner.id),
@@ -454,7 +439,7 @@ class SaleOrder(models.Model):
             ('invoice_date', '>=', twelve_months_ago),
         ], limit=100)
 
-        historical_dso = 30  # default
+        historical_dso = 30
         if paid_invoices:
             dso_list = []
             for inv in paid_invoices:
@@ -472,7 +457,6 @@ class SaleOrder(models.Model):
             if dso_list:
                 historical_dso = sum(dso_list) / len(dso_list)
 
-        # Project from most recent invoice
         invoices = self.invoice_ids.filtered(
             lambda i: i.state == 'posted' and i.move_type == 'out_invoice'
         )
@@ -497,15 +481,6 @@ class SaleOrder(models.Model):
     def _compute_health_score(self, margin_pct, credit_risk, dso,
                                deviation_days, return_margin_impact,
                                net_revenue, overall_fulfillment):
-        """
-        Composite score:
-        - Margin (25%): 100 if margin >=30%, 0 if <= -10%
-        - Credit Risk (20%): directly from credit_risk score
-        - DSO (15%): 100 if 0, 0 if >= 120
-        - Logistics (20%): combination of fulfillment and deviation
-        - Returns Impact (20%): 100 if no impact, 0 if returns ate >50% of revenue
-        """
-        # Margin component (0-100)
         if margin_pct >= 30:
             margin_score = 100
         elif margin_pct <= -10:
@@ -513,10 +488,8 @@ class SaleOrder(models.Model):
         else:
             margin_score = (margin_pct + 10) / 40 * 100
 
-        # Credit risk component
         risk_score = credit_risk['score']
 
-        # DSO component
         if dso <= 0:
             dso_score = 100
         elif dso >= 120:
@@ -524,14 +497,12 @@ class SaleOrder(models.Model):
         else:
             dso_score = (1 - dso / 120) * 100
 
-        # Logistics component
         fulfillment_score = min(overall_fulfillment, 100)
         deviation_score = 100
         if deviation_days > 0:
             deviation_score = max(0, 100 - deviation_days * 5)
         logistics_score = fulfillment_score * 0.5 + deviation_score * 0.5
 
-        # Returns impact component
         if net_revenue > 0:
             return_ratio = abs(return_margin_impact) / net_revenue
             returns_score = max(0, (1 - return_ratio * 2) * 100)
