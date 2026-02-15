@@ -2,7 +2,6 @@
 
 import { Component, useState, onWillUpdateProps, onWillStart } from "@odoo/owl";
 import { registry } from "@web/core/registry";
-import { useService } from "@web/core/utils/hooks";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
 import { rpc } from "@web/core/network/rpc";
 
@@ -11,9 +10,10 @@ class SaleKpiDashboard extends Component {
     static props = { ...standardFieldProps };
 
     setup() {
-        this.actionService = useService("action");
+        console.log("[KPI Dashboard] setup() called");
 
         const raw = this.props.record.data[this.props.name];
+        console.log("[KPI Dashboard] raw data:", typeof raw, raw ? raw.substring(0, 100) + "..." : "empty");
         const data = this._parse(raw);
 
         this.state = useState({
@@ -23,6 +23,7 @@ class SaleKpiDashboard extends Component {
         });
 
         onWillStart(async () => {
+            console.log("[KPI Dashboard] onWillStart - checking margin group...");
             try {
                 const result = await rpc("/web/dataset/call_kw", {
                     model: "res.users",
@@ -31,14 +32,17 @@ class SaleKpiDashboard extends Component {
                     kwargs: {},
                 });
                 this.state.hasMarginAccess = !!result;
+                console.log("[KPI Dashboard] hasMarginAccess:", this.state.hasMarginAccess);
             } catch (e) {
-                console.warn("KPI Dashboard: margin group check failed", e);
+                console.warn("[KPI Dashboard] margin group check failed:", e);
                 this.state.hasMarginAccess = false;
             }
             this.state.loaded = true;
+            console.log("[KPI Dashboard] loaded, state:", JSON.stringify(this.state).substring(0, 200));
         });
 
         onWillUpdateProps((next) => {
+            console.log("[KPI Dashboard] onWillUpdateProps triggered");
             const d = this._parse(next.record.data[next.name]);
             Object.assign(this.state, d);
         });
@@ -96,6 +100,7 @@ class SaleKpiDashboard extends Component {
         const empty = this._defaults();
         try {
             if (!value || value === "false" || value === false) {
+                console.log("[KPI Dashboard] _parse: empty/false value");
                 return empty;
             }
             let parsed = value;
@@ -117,7 +122,7 @@ class SaleKpiDashboard extends Component {
             }
             return result;
         } catch (e) {
-            console.error("KPI Dashboard parse error:", e);
+            console.error("[KPI Dashboard] parse error:", e);
             return empty;
         }
     }
@@ -282,14 +287,9 @@ class SaleKpiDashboard extends Component {
         );
     }
 
-    async openPayment(id) {
-        await this.actionService.doAction({
-            type: "ir.actions.act_window",
-            res_model: "account.payment",
-            res_id: id,
-            views: [[false, "form"]],
-            target: "current",
-        });
+    openPayment(id) {
+        console.log("[KPI Dashboard] openPayment:", id);
+        window.location.href = `/odoo/payments/${id}`;
     }
 }
 
