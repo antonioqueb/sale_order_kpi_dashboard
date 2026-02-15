@@ -9,7 +9,6 @@
     <record id="group_margin_viewer" model="res.groups">
         <field name="name">Ver Márgenes y Rentabilidad</field>
         <field name="comment">Usuarios con este permiso pueden ver los KPIs de margen bruto, % margen, margen por m² e impacto de devoluciones en margen dentro del dashboard de la orden de venta.</field>
-        <field name="category_id" ref="sale.module_category_sales"/>
     </record>
 
 </odoo>
