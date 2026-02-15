@@ -4,7 +4,6 @@ import { Component, useState, onWillUpdateProps, onWillStart } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
-import { session } from "@web/session";
 
 class SaleKpiDashboard extends Component {
     static template = "sale_order_kpi_dashboard.SaleKpiDashboard";
@@ -25,7 +24,15 @@ class SaleKpiDashboard extends Component {
         });
 
         onWillStart(async () => {
-            await this._checkMarginAccess();
+            try {
+                const hasGroup = await this.user.hasGroup(
+                    "sale_order_kpi_dashboard.group_margin_viewer"
+                );
+                this.state.hasMarginAccess = hasGroup;
+            } catch (e) {
+                console.warn("KPI Dashboard: margin group check failed", e);
+                this.state.hasMarginAccess = false;
+            }
             this.state.loaded = true;
         });
 
@@ -35,63 +42,75 @@ class SaleKpiDashboard extends Component {
         });
     }
 
-    async _checkMarginAccess() {
-        try {
-            const hasGroup = await this.user.hasGroup("sale_order_kpi_dashboard.group_margin_viewer");
-            this.state.hasMarginAccess = hasGroup;
-        } catch (e) {
-            console.warn("KPI Dashboard: Could not check margin group", e);
-            this.state.hasMarginAccess = false;
-        }
-    }
-
     _defaults() {
         return {
             margin: {
-                gross_margin: 0, margin_pct: 0, return_margin_impact: 0,
-                margin_per_sqm: 0, net_revenue: 0, net_cost: 0,
+                gross_margin: 0,
+                margin_pct: 0,
+                return_margin_impact: 0,
+                margin_per_sqm: 0,
+                net_revenue: 0,
+                net_cost: 0,
             },
             payment: {
-                dso: 0, total_paid: 0, amount_pending: 0, amount_total: 0, payments: [],
+                dso: 0,
+                total_paid: 0,
+                amount_pending: 0,
+                amount_total: 0,
+                payments: [],
             },
             client: {
-                client_exposure: 0, credit_risk_score: 100,
-                credit_risk_label: 'N/A', credit_risk_color: '#9CA3AF',
-                credit_risk_details: [], partner_name: '',
+                client_exposure: 0,
+                credit_risk_score: 100,
+                credit_risk_label: "N/A",
+                credit_risk_color: "#9CA3AF",
+                credit_risk_details: [],
+                partner_name: "",
             },
             logistics: {
-                lead_time_days: 0, deviation_days: 0, overall_fulfillment: 0,
-                total_ordered: 0, total_delivered: 0,
+                lead_time_days: 0,
+                deviation_days: 0,
+                overall_fulfillment: 0,
+                total_ordered: 0,
+                total_delivered: 0,
             },
             returns: {
-                total_returned_qty: 0, total_returned_revenue: 0,
+                total_returned_qty: 0,
+                total_returned_revenue: 0,
             },
             inventory: {
                 fragmentation_index: 0,
             },
             projections: {
-                projected_collection_date: '-', projected_collection_days: 0,
+                projected_collection_date: "-",
+                projected_collection_days: 0,
             },
             order_health_score: 0,
-            currency: '$',
+            currency: "$",
         };
     }
 
     _parse(value) {
         const empty = this._defaults();
         try {
-            if (!value || value === "false" || value === false) return empty;
+            if (!value || value === "false" || value === false) {
+                return empty;
+            }
             let parsed = value;
             if (typeof value === "string") {
                 parsed = JSON.parse(value);
             }
-            // Deep merge with defaults
-            const result = { ...empty };
+            const result = {};
             for (const key of Object.keys(empty)) {
-                if (typeof empty[key] === 'object' && empty[key] !== null && !Array.isArray(empty[key])) {
-                    result[key] = { ...empty[key], ...(parsed[key] || {}) };
+                if (
+                    typeof empty[key] === "object" &&
+                    empty[key] !== null &&
+                    !Array.isArray(empty[key])
+                ) {
+                    result[key] = Object.assign({}, empty[key], parsed[key] || {});
                 } else {
-                    result[key] = parsed[key] !== undefined ? parsed[key] : empty[key];
+                    result[key] =
+                        parsed[key] !== undefined ? parsed[key] : empty[key];
                 }
             }
             return result;
@@ -101,10 +120,13 @@ class SaleKpiDashboard extends Component {
         }
     }
 
-    // ── Formatters ──────────────────────────────────────────────
+    // ── Formatters ─────────────────────────────────────────
     fmt(val) {
         if (val === undefined || val === null) return "0.00";
-        return parseFloat(val).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return parseFloat(val).toLocaleString("es-MX", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
     }
 
     fmtInt(val) {
@@ -121,10 +143,13 @@ class SaleKpiDashboard extends Component {
         if (val === undefined || val === null) return "0";
         const n = parseFloat(val);
         if (n === Math.floor(n)) return n.toLocaleString("es-MX");
-        return n.toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return n.toLocaleString("es-MX", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
     }
 
-    // ── Health Score Helpers ─────────────────────────────────────
+    // ── Health Score ───────────────────────────────────────
     getHealthClass(score) {
         if (score >= 80) return "kpi-health-excellent";
         if (score >= 60) return "kpi-health-good";
@@ -146,25 +171,28 @@ class SaleKpiDashboard extends Component {
         return "#EF4444";
     }
 
-    // SVG gauge calculations
-    getGaugeDasharray() {
-        return 2 * Math.PI * 27; // radius=27
+    getGaugeCircumference() {
+        return 2 * Math.PI * 27;
     }
 
     getGaugeDashoffset(score) {
-        const circumference = 2 * Math.PI * 27;
-        return circumference - (score / 100) * circumference;
+        var c = 2 * Math.PI * 27;
+        return c - (score / 100) * c;
     }
 
-    // ── Fulfillment helpers ─────────────────────────────────────
-    getFulfillmentColor(pct) {
+    // ── Fulfillment ────────────────────────────────────────
+    getFulfillmentFill(pct) {
         if (pct >= 100) return "kpi-fill-green";
         if (pct > 50) return "kpi-fill-blue";
         if (pct > 0) return "kpi-fill-amber";
         return "kpi-fill-red";
     }
 
-    // ── Deviation helper ────────────────────────────────────────
+    getFulfillmentWidth() {
+        return Math.min(this.state.logistics.overall_fulfillment, 100);
+    }
+
+    // ── Deviation ──────────────────────────────────────────
     getDeviationClass(days) {
         if (days > 0) return "kpi-deviation-positive";
         if (days < 0) return "kpi-deviation-negative";
@@ -172,64 +200,96 @@ class SaleKpiDashboard extends Component {
     }
 
     getDeviationText(days) {
-        if (days > 0) return `+${days} días tarde`;
-        if (days < 0) return `${Math.abs(days)} días antes`;
+        if (days > 0) return "+" + days + " días tarde";
+        if (days < 0) return Math.abs(days) + " días antes";
         return "En tiempo";
     }
 
-    // ── DSO color ───────────────────────────────────────────────
-    getDsoColor(dso) {
-        if (dso <= 30) return "kpi-accent-green";
-        if (dso <= 60) return "kpi-accent-amber";
+    isDeviationLate() {
+        return this.state.logistics.deviation_days > 0;
+    }
+
+    // ── DSO ────────────────────────────────────────────────
+    getDsoAccent() {
+        var d = this.state.payment.dso;
+        if (d <= 30) return "kpi-accent-green";
+        if (d <= 60) return "kpi-accent-amber";
         return "kpi-accent-red";
     }
 
-    getDsoIconColor(dso) {
-        if (dso <= 30) return "kpi-icon-green";
-        if (dso <= 60) return "kpi-icon-amber";
+    getDsoIcon() {
+        var d = this.state.payment.dso;
+        if (d <= 30) return "kpi-icon-green";
+        if (d <= 60) return "kpi-icon-amber";
         return "kpi-icon-red";
     }
 
-    // ── Fragmentation color ─────────────────────────────────────
-    getFragColor(idx) {
-        if (idx <= 5) return "kpi-accent-green";
-        if (idx <= 15) return "kpi-accent-amber";
+    // ── Payment ────────────────────────────────────────────
+    getPaymentBarWidth() {
+        var t = this.state.payment.amount_total;
+        if (t <= 0) return 0;
+        return Math.min((this.state.payment.total_paid / t) * 100, 100);
+    }
+
+    hasPending() {
+        return this.state.payment.amount_pending > 0;
+    }
+
+    // ── Margin ─────────────────────────────────────────────
+    getMarginAccent() {
+        var p = this.state.margin.margin_pct;
+        if (p >= 20) return "kpi-accent-green";
+        if (p >= 10) return "kpi-accent-blue";
+        if (p >= 0) return "kpi-accent-amber";
         return "kpi-accent-red";
     }
 
-    getFragIconColor(idx) {
-        if (idx <= 5) return "kpi-icon-green";
-        if (idx <= 15) return "kpi-icon-amber";
+    getMarginIcon() {
+        var p = this.state.margin.margin_pct;
+        if (p >= 20) return "kpi-icon-green";
+        if (p >= 10) return "kpi-icon-blue";
+        if (p >= 0) return "kpi-icon-amber";
         return "kpi-icon-red";
     }
 
-    // ── Margin color ────────────────────────────────────────────
-    getMarginColor(pct) {
-        if (pct >= 20) return "kpi-accent-green";
-        if (pct >= 10) return "kpi-accent-blue";
-        if (pct >= 0) return "kpi-accent-amber";
-        return "kpi-accent-red";
+    getMarginFill() {
+        var p = this.state.margin.margin_pct;
+        if (p >= 20) return "kpi-fill-green";
+        if (p >= 10) return "kpi-fill-blue";
+        if (p >= 0) return "kpi-fill-amber";
+        return "kpi-fill-red";
     }
 
-    getMarginIconColor(pct) {
-        if (pct >= 20) return "kpi-icon-green";
-        if (pct >= 10) return "kpi-icon-blue";
-        if (pct >= 0) return "kpi-icon-amber";
-        return "kpi-icon-red";
+    getMarginBarWidth() {
+        return Math.max(0, Math.min(this.state.margin.margin_pct, 50)) * 2;
     }
 
-    // ── Pending color ───────────────────────────────────────────
-    getPendingColor(amount) {
-        if (amount <= 0) return "kpi-accent-green";
-        return "kpi-accent-red";
+    isMarginNegative() {
+        return this.state.margin.gross_margin < 0;
     }
 
-    getPendingIconColor(amount) {
-        if (amount <= 0) return "kpi-icon-green";
-        return "kpi-icon-orange";
+    hasReturnImpact() {
+        return this.state.margin.return_margin_impact > 0;
     }
 
-    // ── Navigation ──────────────────────────────────────────────
+    absReturnImpact() {
+        return Math.abs(this.state.margin.return_margin_impact);
+    }
+
+    // ── Fragmentation ──────────────────────────────────────
+    isFragHigh() {
+        return this.state.inventory.fragmentation_index > 15;
+    }
+
+    // ── Risk ───────────────────────────────────────────────
+    hasRiskDetails() {
+        return (
+            this.state.client.credit_risk_details &&
+            this.state.client.credit_risk_details.length > 0
+        );
+    }
+
+    // ── Navigation ─────────────────────────────────────────
     async openPayment(id) {
         await this.actionService.doAction({
             type: "ir.actions.act_window",
