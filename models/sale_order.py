@@ -12,7 +12,6 @@ class SaleOrder(models.Model):
         compute='_compute_kpi_dashboard_data',
     )
 
-    # ── Convenience stored fields ──────────────────────────────────
     kpi_order_health_score = fields.Float(
         string='Order Health Score',
         compute='_compute_kpi_dashboard_data',
@@ -23,9 +22,6 @@ class SaleOrder(models.Model):
         currency_field='currency_id',
     )
 
-    # ══════════════════════════════════════════════════════════════
-    #  MAIN COMPUTE
-    # ══════════════════════════════════════════════════════════════
     @api.depends(
         'order_line.qty_delivered',
         'order_line.product_uom_qty',
@@ -51,11 +47,29 @@ class SaleOrder(models.Model):
             order.kpi_amount_pending = data.get('payment', {}).get('amount_pending', 0)
 
     # ──────────────────────────────────────────────────────────────
+    #  Currency conversion helper
+    # ──────────────────────────────────────────────────────────────
+    def _to_mxn(self, amount, from_currency, company, date=None):
+        """Convert amount to MXN. Returns amount unchanged if already MXN."""
+        mxn = self.env.ref('base.MXN', raise_if_not_found=False)
+        if not mxn or from_currency == mxn:
+            return amount
+        return from_currency._convert(
+            amount, mxn, company, date or fields.Date.today()
+        )
+
+    # ──────────────────────────────────────────────────────────────
     def _build_kpi_data(self):
         self.ensure_one()
         order = self
 
-        # ── 1) Line-level aggregation ─────────────────────────────
+        mxn = self.env.ref('base.MXN', raise_if_not_found=False)
+        target_currency = mxn or order.currency_id
+        order_currency = order.currency_id
+        company = order.company_id
+        convert_date = (order.date_order and order.date_order.date()) or fields.Date.today()
+
+        # ── 1) Line-level aggregation (en moneda de la orden) ─────
         total_revenue = 0.0
         total_cost = 0.0
         total_returned_qty = 0.0
@@ -94,6 +108,13 @@ class SaleOrder(models.Model):
             total_delivered_qty += qty_delivered
             total_sqm_ordered += qty_ordered
 
+        # ── Convert all monetary values to MXN ────────────────────
+        total_revenue = self._to_mxn(total_revenue, order_currency, company, convert_date)
+        total_cost = self._to_mxn(total_cost, order_currency, company, convert_date)
+        total_returned_revenue = self._to_mxn(total_returned_revenue, order_currency, company, convert_date)
+        total_returned_cost = self._to_mxn(total_returned_cost, order_currency, company, convert_date)
+        amount_total_mxn = self._to_mxn(order.amount_total, order_currency, company, convert_date)
+
         # ── KPI 1: Margen Bruto Real ──────────────────────────────
         net_revenue = total_revenue - total_returned_revenue
         net_cost = total_cost - total_returned_cost
@@ -126,18 +147,26 @@ class SaleOrder(models.Model):
                     payment_ids_seen.add(pay.id)
                     if pay.date:
                         payment_dates.append(pay.date)
+                    # Convert payment amount to MXN
+                    pay_amount_mxn = self._to_mxn(
+                        pay.amount, pay.currency_id, pay.company_id, pay.date
+                    )
                     payments_data.append({
                         'id': pay.id,
                         'date': pay.date.strftime('%d/%m/%Y') if pay.date else '',
                         'name': pay.name or '',
                         'journal': pay.journal_id.name or '',
-                        'amount': pay.amount,
-                        'currency': pay.currency_id.symbol or '$',
+                        'amount': round(pay_amount_mxn, 2),
+                        'currency': target_currency.symbol or '$',
                     })
                 if pay:
-                    total_paid += partial.amount
+                    # partial.amount is in company currency, convert to MXN
+                    partial_mxn = self._to_mxn(
+                        partial.amount, company.currency_id, company, pay.date or fields.Date.today()
+                    )
+                    total_paid += partial_mxn
 
-        amount_pending = order.amount_total - total_paid
+        amount_pending = amount_total_mxn - total_paid
 
         # ── KPI 4: DSO (Días de Cartera por Orden) ───────────────
         dso = 0.0
@@ -162,8 +191,6 @@ class SaleOrder(models.Model):
             ('partner_id.commercial_partner_id', '=', partner.id),
             ('state', 'in', ['sale', 'done']),
         ])
-        mxn = self.env.ref('base.MXN', raise_if_not_found=False)
-        target_currency = mxn or order.currency_id
         client_exposure = 0.0
         for o in client_open_orders:
             inv_posted = o.invoice_ids.filtered(lambda i: i.state == 'posted' and i.move_type == 'out_invoice')
@@ -225,7 +252,7 @@ class SaleOrder(models.Model):
             overall_fulfillment=overall_fulfillment,
         )
 
-        currency_sym = order.currency_id.symbol or '$'
+        mxn_sym = target_currency.symbol or '$'
 
         return {
             'margin': {
@@ -240,12 +267,12 @@ class SaleOrder(models.Model):
                 'dso': round(dso, 1),
                 'total_paid': round(total_paid, 2),
                 'amount_pending': round(amount_pending, 2),
-                'amount_total': order.amount_total,
+                'amount_total': round(amount_total_mxn, 2),
                 'payments': payments_data,
             },
             'client': {
                 'client_exposure': round(client_exposure, 2),
-                'client_exposure_currency': target_currency.symbol or '$',
+                'client_exposure_currency': mxn_sym,
                 'credit_risk_score': credit_risk['score'],
                 'credit_risk_label': credit_risk['label'],
                 'credit_risk_color': credit_risk['color'],
@@ -271,7 +298,7 @@ class SaleOrder(models.Model):
                 'projected_collection_days': projected_collection['days'],
             },
             'order_health_score': round(health_score, 0),
-            'currency': currency_sym,
+            'currency': mxn_sym,
             'has_margin_access': self.env.user.has_group('sale_order_kpi_dashboard.group_margin_viewer'),
         }
 
