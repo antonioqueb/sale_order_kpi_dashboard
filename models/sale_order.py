@@ -273,7 +273,7 @@ class SaleOrder(models.Model):
             # Composite
             'order_health_score': round(health_score, 0),
             'currency': currency_sym,
-            'has_margin_access': False,  # will be set by JS
+            'has_margin_access': self.env.user.has_group('sale_order_kpi_dashboard.group_margin_viewer'),
         }
 
     # ══════════════════════════════════════════════════════════════

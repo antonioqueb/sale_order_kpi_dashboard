@@ -1,9 +1,8 @@
 /** @odoo-module **/
 
-import { Component, useState, onWillUpdateProps, onWillStart } from "@odoo/owl";
+import { Component, useState, onWillUpdateProps } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
-import { rpc } from "@web/core/network/rpc";
 
 class SaleKpiDashboard extends Component {
     static template = "sale_order_kpi_dashboard.SaleKpiDashboard";
@@ -13,38 +12,22 @@ class SaleKpiDashboard extends Component {
         console.log("[KPI Dashboard] setup() called");
 
         const raw = this.props.record.data[this.props.name];
-        console.log("[KPI Dashboard] raw data:", typeof raw, raw ? raw.substring(0, 100) + "..." : "empty");
+        console.log("[KPI Dashboard] raw data:", typeof raw, raw ? String(raw).substring(0, 100) + "..." : "empty");
         const data = this._parse(raw);
 
         this.state = useState({
             ...data,
-            hasMarginAccess: false,
-            loaded: false,
+            hasMarginAccess: data.has_margin_access || false,
+            loaded: true,
         });
 
-        onWillStart(async () => {
-            console.log("[KPI Dashboard] onWillStart - checking margin group...");
-            try {
-                const result = await rpc("/web/dataset/call_kw", {
-                    model: "res.users",
-                    method: "has_group",
-                    args: ["sale_order_kpi_dashboard.group_margin_viewer"],
-                    kwargs: {},
-                });
-                this.state.hasMarginAccess = !!result;
-                console.log("[KPI Dashboard] hasMarginAccess:", this.state.hasMarginAccess);
-            } catch (e) {
-                console.warn("[KPI Dashboard] margin group check failed:", e);
-                this.state.hasMarginAccess = false;
-            }
-            this.state.loaded = true;
-            console.log("[KPI Dashboard] loaded, state:", JSON.stringify(this.state).substring(0, 200));
-        });
+        console.log("[KPI Dashboard] hasMarginAccess:", this.state.hasMarginAccess);
 
         onWillUpdateProps((next) => {
             console.log("[KPI Dashboard] onWillUpdateProps triggered");
             const d = this._parse(next.record.data[next.name]);
             Object.assign(this.state, d);
+            this.state.hasMarginAccess = d.has_margin_access || false;
         });
     }
 
@@ -93,6 +76,7 @@ class SaleKpiDashboard extends Component {
             },
             order_health_score: 0,
             currency: "$",
+            has_margin_access: false,
         };
     }
 
