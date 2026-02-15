@@ -4,6 +4,7 @@ import { Component, useState, onWillUpdateProps, onWillStart } from "@odoo/owl";
 import { registry } from "@web/core/registry";
 import { useService } from "@web/core/utils/hooks";
 import { standardFieldProps } from "@web/views/fields/standard_field_props";
+import { rpc } from "@web/core/network/rpc";
 
 class SaleKpiDashboard extends Component {
     static template = "sale_order_kpi_dashboard.SaleKpiDashboard";
@@ -11,7 +12,6 @@ class SaleKpiDashboard extends Component {
 
     setup() {
         this.actionService = useService("action");
-        this.orm = useService("orm");
 
         const raw = this.props.record.data[this.props.name];
         const data = this._parse(raw);
@@ -24,24 +24,16 @@ class SaleKpiDashboard extends Component {
 
         onWillStart(async () => {
             try {
-                const result = await this.orm.call(
-                    "res.users",
-                    "has_group",
-                    [this.props.record.model.user.userId, "sale_order_kpi_dashboard.group_margin_viewer"],
-                );
-                this.state.hasMarginAccess = result;
+                const result = await rpc("/web/dataset/call_kw", {
+                    model: "res.users",
+                    method: "has_group",
+                    args: ["sale_order_kpi_dashboard.group_margin_viewer"],
+                    kwargs: {},
+                });
+                this.state.hasMarginAccess = !!result;
             } catch (e) {
-                try {
-                    const result = await this.orm.call(
-                        "res.users",
-                        "has_group",
-                        ["sale_order_kpi_dashboard.group_margin_viewer"],
-                    );
-                    this.state.hasMarginAccess = result;
-                } catch (e2) {
-                    console.warn("KPI Dashboard: margin group check failed", e2);
-                    this.state.hasMarginAccess = false;
-                }
+                console.warn("KPI Dashboard: margin group check failed", e);
+                this.state.hasMarginAccess = false;
             }
             this.state.loaded = true;
         });
