@@ -22,18 +22,22 @@
     </record>
 
     <!-- ═══════════════════════════════════════════════════════════
-         Restrict margin fields from sale_margin to group_margin_viewer
+         Restrict ALL margin fields to group_margin_viewer
+         Inherits from: sale_margin.sale_margin_sale_order
          ═══════════════════════════════════════════════════════════ -->
-
-    <!-- 1) Hide margin + margin_percent totals at bottom of sale order form -->
-    <record id="view_order_form_hide_margin_totals" model="ir.ui.view">
-        <field name="name">sale.order.form.hide.margin.totals</field>
+    <record id="view_order_form_hide_margin" model="ir.ui.view">
+        <field name="name">sale.order.form.hide.margin</field>
         <field name="model">sale.order</field>
-        <field name="inherit_id" ref="sale_margin.sale_order_margin_view_form"/>
+        <field name="inherit_id" ref="sale_margin.sale_margin_sale_order"/>
         <field name="priority">99</field>
         <field name="arch" type="xml">
 
+            <!-- Totals: margin + margin_percent at bottom -->
             <xpath expr="//field[@name='margin']" position="attributes">
+                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
+            </xpath>
+
+            <xpath expr="//label[@for='margin']" position="attributes">
                 <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
             </xpath>
 
@@ -41,26 +45,21 @@
                 <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
             </xpath>
 
-        </field>
-    </record>
-
-    <!-- 2) Hide purchase_price (cost) + margin + margin_percent columns in order lines tree -->
-    <record id="view_order_form_hide_margin_lines" model="ir.ui.view">
-        <field name="name">sale.order.form.hide.margin.lines</field>
-        <field name="model">sale.order</field>
-        <field name="inherit_id" ref="sale_margin.sale_margin_sale_order_line_form"/>
-        <field name="priority">99</field>
-        <field name="arch" type="xml">
-
-            <xpath expr="//field[@name='order_line']//field[@name='purchase_price']" position="attributes">
+            <!-- Order lines form: purchase_price (cost) -->
+            <xpath expr="//field[@name='order_line']//form//field[@name='purchase_price']" position="attributes">
                 <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
             </xpath>
 
-            <xpath expr="//field[@name='order_line']//field[@name='margin']" position="attributes">
+            <!-- Order lines list: purchase_price, margin, margin_percent -->
+            <xpath expr="//field[@name='order_line']//list//field[@name='purchase_price']" position="attributes">
                 <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
             </xpath>
 
-            <xpath expr="//field[@name='order_line']//field[@name='margin_percent']" position="attributes">
+            <xpath expr="//field[@name='order_line']//list//field[@name='margin']" position="attributes">
+                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='order_line']//list//field[@name='margin_percent']" position="attributes">
                 <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
             </xpath>
 
