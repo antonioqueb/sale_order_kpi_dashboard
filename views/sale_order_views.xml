@@ -32,16 +32,8 @@
         <field name="priority">99</field>
         <field name="arch" type="xml">
 
-            <!-- Totals: margin + margin_percent at bottom -->
-            <xpath expr="//field[@name='margin']" position="attributes">
-                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
-            </xpath>
-
-            <xpath expr="//label[@for='margin']" position="attributes">
-                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
-            </xpath>
-
-            <xpath expr="//field[@name='margin_percent']" position="attributes">
+            <!-- Hide the entire margin totals div (label + value + percentage) -->
+            <xpath expr="//div[hasclass('d-flex','float-end')]" position="attributes">
                 <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
             </xpath>
 
