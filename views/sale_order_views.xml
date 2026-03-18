@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
+    <!-- ═══════════════════════════════════════════════════════════
+         KPI Dashboard inside sale order form
+         ═══════════════════════════════════════════════════════════ -->
     <record id="view_order_form_kpi_dashboard" model="ir.ui.view">
         <field name="name">sale.order.form.kpi.dashboard</field>
         <field name="model">sale.order</field>
@@ -8,19 +11,57 @@
         <field name="priority">70</field>
         <field name="arch" type="xml">
 
-            <!-- 
-                CAMBIO: En lugar de 'notebook' 'after', usamos 'page order_lines' 'inside'.
-                Esto coloca los KPIs al final de la pestaña principal, justo debajo 
-                de la lista de productos y los totales (Pagos).
-            -->
             <xpath expr="//page[@name='order_lines']" position="inside">
-                
-                <!-- Contenedor con margen superior y borde para separar visualmente de los totales -->
                 <div class="mt-4 pt-3 border-top">
                     <div class="h3 mb-3 text-muted ps-2">Análisis de Rendimiento (KPIs)</div>
                     <field name="kpi_dashboard_data" widget="sale_kpi_dashboard" nolabel="1"/>
                 </div>
-                
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         Restrict margin fields from sale_margin to group_margin_viewer
+         ═══════════════════════════════════════════════════════════ -->
+
+    <!-- 1) Hide margin + margin_percent totals at bottom of sale order form -->
+    <record id="view_order_form_hide_margin_totals" model="ir.ui.view">
+        <field name="name">sale.order.form.hide.margin.totals</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale_margin.sale_order_margin_view_form"/>
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+
+            <xpath expr="//field[@name='margin']" position="attributes">
+                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='margin_percent']" position="attributes">
+                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
+            </xpath>
+
+        </field>
+    </record>
+
+    <!-- 2) Hide purchase_price (cost) + margin + margin_percent columns in order lines tree -->
+    <record id="view_order_form_hide_margin_lines" model="ir.ui.view">
+        <field name="name">sale.order.form.hide.margin.lines</field>
+        <field name="model">sale.order</field>
+        <field name="inherit_id" ref="sale_margin.sale_margin_sale_order_line_form"/>
+        <field name="priority">99</field>
+        <field name="arch" type="xml">
+
+            <xpath expr="//field[@name='order_line']//field[@name='purchase_price']" position="attributes">
+                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='order_line']//field[@name='margin']" position="attributes">
+                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
+            </xpath>
+
+            <xpath expr="//field[@name='order_line']//field[@name='margin_percent']" position="attributes">
+                <attribute name="groups">sale_order_kpi_dashboard.group_margin_viewer</attribute>
             </xpath>
 
         </field>
