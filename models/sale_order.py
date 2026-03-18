@@ -93,7 +93,7 @@ class SaleOrder(models.Model):
                 lambda m: m.state == 'done' and m.picking_code == 'outgoing'
             )
             if out_moves:
-                returns = self.env['stock.move'].search([
+                returns = self.env['stock.move'].sudo().search([
                     ('origin_returned_move_id', 'in', out_moves.ids),
                     ('state', '=', 'done'),
                 ])
@@ -140,7 +140,7 @@ class SaleOrder(models.Model):
         for invoice in invoices:
             if invoice.invoice_date:
                 invoice_dates.append(invoice.invoice_date)
-            reconciled_partials = invoice.line_ids.mapped('matched_credit_ids')
+            reconciled_partials = invoice.sudo().line_ids.mapped('matched_credit_ids')
             for partial in reconciled_partials:
                 pay = partial.credit_move_id.payment_id
                 if pay and pay.id not in payment_ids_seen:
@@ -175,7 +175,7 @@ class SaleOrder(models.Model):
             for invoice in invoices:
                 if not invoice.invoice_date:
                     continue
-                for partial in invoice.line_ids.mapped('matched_credit_ids'):
+                for partial in invoice.sudo().line_ids.mapped('matched_credit_ids'):
                     pay = partial.credit_move_id.payment_id
                     if pay and pay.date:
                         delta = (pay.date - invoice.invoice_date).days
@@ -187,7 +187,7 @@ class SaleOrder(models.Model):
 
         # ── KPI 5: Exposición Total del Cliente (siempre en MXN) ──
         partner = order.partner_id.commercial_partner_id or order.partner_id
-        client_open_orders = self.env['sale.order'].search([
+        client_open_orders = self.env['sale.order'].sudo().search([
             ('partner_id.commercial_partner_id', '=', partner.id),
             ('state', 'in', ['sale', 'done']),
         ])
@@ -309,7 +309,11 @@ class SaleOrder(models.Model):
         score = 100
         details = []
 
-        overdue_invoices = self.env['account.move'].search([
+        # Use sudo() for all invoice/partner queries to avoid access rights issues
+        sudo_env = self.env['account.move'].sudo()
+        partner_sudo = partner.sudo()
+
+        overdue_invoices = sudo_env.search([
             ('partner_id.commercial_partner_id', '=', partner.id),
             ('state', '=', 'posted'),
             ('move_type', '=', 'out_invoice'),
@@ -342,7 +346,8 @@ class SaleOrder(models.Model):
                 score -= 5
                 details.append(f"Promedio {avg_overdue:.0f} días de atraso")
 
-        credit_limit = partner.credit_limit if hasattr(partner, 'credit_limit') and partner.credit_limit else 0
+        # Access credit_limit via sudo to avoid access rights error
+        credit_limit = partner_sudo.credit_limit if hasattr(partner_sudo, 'credit_limit') and partner_sudo.credit_limit else 0
         if credit_limit > 0:
             usage = exposure / credit_limit
             if usage > 1.0:
@@ -357,7 +362,7 @@ class SaleOrder(models.Model):
                 details.append("Sin límite de crédito definido")
 
         twelve_months_ago = fields.Date.today() - timedelta(days=365)
-        paid_invoices = self.env['account.move'].search([
+        paid_invoices = sudo_env.search([
             ('partner_id.commercial_partner_id', '=', partner.id),
             ('state', '=', 'posted'),
             ('move_type', '=', 'out_invoice'),
@@ -423,18 +428,21 @@ class SaleOrder(models.Model):
         total_remnant_small = 0.0
         threshold_sqm = 1.0
 
+        sudo_quant = self.env['stock.quant'].sudo()
+        sudo_sml = self.env['stock.move.line'].sudo()
+
         for lot in lot_ids:
-            quants = self.env['stock.quant'].search([
+            quants = sudo_quant.search([
                 ('lot_id', '=', lot.id),
                 ('location_id.usage', '=', 'internal'),
             ])
             current_qty = sum(quants.mapped('quantity'))
-            outgoing = self.env['stock.move.line'].search([
+            outgoing = sudo_sml.search([
                 ('lot_id', '=', lot.id),
                 ('state', '=', 'done'),
                 ('move_id.picking_code', '=', 'outgoing'),
             ])
-            incoming = self.env['stock.move.line'].search([
+            incoming = sudo_sml.search([
                 ('lot_id', '=', lot.id),
                 ('state', '=', 'done'),
                 ('move_id.picking_code', '=', 'incoming'),
@@ -458,7 +466,7 @@ class SaleOrder(models.Model):
             return {'date_str': 'Cobrado', 'days': 0}
 
         twelve_months_ago = fields.Date.today() - timedelta(days=365)
-        paid_invoices = self.env['account.move'].search([
+        paid_invoices = self.env['account.move'].sudo().search([
             ('partner_id.commercial_partner_id', '=', partner.id),
             ('state', '=', 'posted'),
             ('move_type', '=', 'out_invoice'),
