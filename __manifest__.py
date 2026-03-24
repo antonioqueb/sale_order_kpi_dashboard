@@ -1,11 +1,11 @@
 {
     'name': 'Sale Order KPI Dashboard (Odoo 19)',
-    'version': '19.0.1.0.0',
+    'version': '19.0.2.0.0',
     'category': 'Sales',
     'summary': 'Strategic KPIs: Margin, Credit Risk, DSO, Lead Time, Lot Fragmentation, Order Health Score',
     'author': 'Alphaqueb Consulting',
     'website': 'https://www.alphaqueb.com',
-    'depends': ['sale', 'sale_management', 'stock', 'account', 'sale_margin'],
+    'depends': ['sale', 'sale_management', 'stock', 'account'],
     'data': [
         'security/ir.model.access.csv',
         'security/security.xml',
