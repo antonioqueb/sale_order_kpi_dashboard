@@ -1,7 +1,6 @@
 from odoo import models, fields, api
 from datetime import timedelta
 import json
-import math
 
 
 class SaleOrder(models.Model):
@@ -28,7 +27,7 @@ class SaleOrder(models.Model):
         'order_line.move_ids',
         'order_line.move_ids.state',
         'order_line.price_unit',
-        'order_line.purchase_price',
+        'order_line.kpi_cost_price',
         'invoice_ids',
         'invoice_ids.state',
         'invoice_ids.amount_residual',
@@ -50,7 +49,6 @@ class SaleOrder(models.Model):
     #  Currency conversion helper
     # ──────────────────────────────────────────────────────────────
     def _to_mxn(self, amount, from_currency, company, date=None):
-        """Convert amount to MXN. Returns amount unchanged if already MXN."""
         mxn = self.env.ref('base.MXN', raise_if_not_found=False)
         if not mxn or from_currency == mxn:
             return amount
@@ -69,7 +67,6 @@ class SaleOrder(models.Model):
         company = order.company_id
         convert_date = (order.date_order and order.date_order.date()) or fields.Date.today()
 
-        # ── 1) Line-level aggregation (en moneda de la orden) ─────
         total_revenue = 0.0
         total_cost = 0.0
         total_returned_qty = 0.0
@@ -83,7 +80,7 @@ class SaleOrder(models.Model):
             qty_ordered = line.product_uom_qty
             qty_delivered = line.qty_delivered
             price = line.price_unit
-            cost = line.purchase_price or 0.0
+            cost = line.kpi_cost_price or 0.0
 
             revenue_line = qty_delivered * price
             cost_line = qty_delivered * cost
@@ -108,25 +105,17 @@ class SaleOrder(models.Model):
             total_delivered_qty += qty_delivered
             total_sqm_ordered += qty_ordered
 
-        # ── Convert all monetary values to MXN ────────────────────
         total_revenue = self._to_mxn(total_revenue, order_currency, company, convert_date)
         total_cost = self._to_mxn(total_cost, order_currency, company, convert_date)
         total_returned_revenue = self._to_mxn(total_returned_revenue, order_currency, company, convert_date)
         total_returned_cost = self._to_mxn(total_returned_cost, order_currency, company, convert_date)
         amount_total_mxn = self._to_mxn(order.amount_total, order_currency, company, convert_date)
 
-        # ── KPI 1: Margen Bruto Real ──────────────────────────────
         net_revenue = total_revenue - total_returned_revenue
         net_cost = total_cost - total_returned_cost
         gross_margin = net_revenue - net_cost
-
-        # ── KPI 2: % Margen Real ──────────────────────────────────
         margin_pct = (gross_margin / net_revenue * 100) if net_revenue else 0.0
-
-        # ── KPI 3: Impacto Neto Devoluciones en Margen ────────────
         return_margin_impact = total_returned_revenue - total_returned_cost
-
-        # ── KPI 9: Margen por m² ──────────────────────────────────
         margin_per_sqm = (gross_margin / total_sqm_ordered) if total_sqm_ordered else 0.0
 
         # ── Payment metrics ───────────────────────────────────────
@@ -147,7 +136,6 @@ class SaleOrder(models.Model):
                     payment_ids_seen.add(pay.id)
                     if pay.date:
                         payment_dates.append(pay.date)
-                    # Convert payment amount to MXN
                     pay_amount_mxn = self._to_mxn(
                         pay.amount, pay.currency_id, pay.company_id, pay.date
                     )
@@ -160,7 +148,6 @@ class SaleOrder(models.Model):
                         'currency': target_currency.symbol or '$',
                     })
                 if pay:
-                    # partial.amount is in company currency, convert to MXN
                     partial_mxn = self._to_mxn(
                         partial.amount, company.currency_id, company, pay.date or fields.Date.today()
                     )
@@ -168,7 +155,7 @@ class SaleOrder(models.Model):
 
         amount_pending = amount_total_mxn - total_paid
 
-        # ── KPI 4: DSO (Días de Cartera por Orden) ───────────────
+        # ── DSO ───────────────────────────────────────────────────
         dso = 0.0
         if invoice_dates and payment_dates:
             dso_days = []
@@ -185,7 +172,7 @@ class SaleOrder(models.Model):
             earliest = min(invoice_dates)
             dso = (fields.Date.today() - earliest).days
 
-        # ── KPI 5: Exposición Total del Cliente (siempre en MXN) ──
+        # ── Exposición del Cliente ────────────────────────────────
         partner = order.partner_id.commercial_partner_id or order.partner_id
         client_open_orders = self.env['sale.order'].sudo().search([
             ('partner_id.commercial_partner_id', '=', partner.id),
@@ -198,17 +185,14 @@ class SaleOrder(models.Model):
                 residual = inv.amount_residual
                 if inv.currency_id != target_currency:
                     residual = inv.currency_id._convert(
-                        residual,
-                        target_currency,
-                        inv.company_id,
+                        residual, target_currency, inv.company_id,
                         inv.invoice_date or fields.Date.today(),
                     )
                 client_exposure += residual
 
-        # ── KPI 6: Índice de Riesgo de Crédito ───────────────────
         credit_risk = self._compute_credit_risk_index(partner, client_exposure)
 
-        # ── KPI 7: Lead Time Total ────────────────────────────────
+        # ── Lead Time ─────────────────────────────────────────────
         lead_time_days = 0
         if order.date_order:
             done_moves = order.order_line.mapped('move_ids').filtered(
@@ -218,7 +202,7 @@ class SaleOrder(models.Model):
                 last_delivery = max(done_moves.mapped('date'))
                 lead_time_days = (last_delivery.date() - order.date_order.date()).days
 
-        # ── KPI 8: Desviación vs Fecha Prometida ─────────────────
+        # ── Desviación ────────────────────────────────────────────
         deviation_days = 0
         if order.commitment_date:
             done_moves = order.order_line.mapped('move_ids').filtered(
@@ -228,20 +212,13 @@ class SaleOrder(models.Model):
                 last_delivery = max(done_moves.mapped('date'))
                 deviation_days = (last_delivery.date() - order.commitment_date.date()).days
 
-        # ── KPI 10: Índice de Fragmentación de Lote ──────────────
         fragmentation_index = self._compute_lot_fragmentation()
+        projected_collection = self._compute_projected_collection(partner, amount_pending, dso)
 
-        # ── KPI 11: Tiempo hasta Cobro Total Proyectado ──────────
-        projected_collection = self._compute_projected_collection(
-            partner, amount_pending, dso
-        )
-
-        # ── Fulfillment ──────────────────────────────────────────
         overall_fulfillment = 0.0
         if total_ordered_qty > 0:
             overall_fulfillment = round((total_delivered_qty / total_ordered_qty) * 100, 1)
 
-        # ── KPI 12: Order Health Score ────────────────────────────
         health_score = self._compute_health_score(
             margin_pct=margin_pct,
             credit_risk=credit_risk,
@@ -309,7 +286,6 @@ class SaleOrder(models.Model):
         score = 100
         details = []
 
-        # Use sudo() for all invoice/partner queries to avoid access rights issues
         sudo_env = self.env['account.move'].sudo()
         partner_sudo = partner.sudo()
 
@@ -346,7 +322,6 @@ class SaleOrder(models.Model):
                 score -= 5
                 details.append(f"Promedio {avg_overdue:.0f} días de atraso")
 
-        # Access credit_limit via sudo to avoid access rights error
         credit_limit = partner_sudo.credit_limit if hasattr(partner_sudo, 'credit_limit') and partner_sudo.credit_limit else 0
         if credit_limit > 0:
             usage = exposure / credit_limit
