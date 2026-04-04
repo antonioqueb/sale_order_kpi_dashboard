@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- ═══════════════════════════════════════════════════════════
-         KPI Dashboard inside sale order form
-         ═══════════════════════════════════════════════════════════ -->
+    <!-- =========================================================
+         KPI Dashboard dentro de una página propia del sale.order
+         ========================================================= -->
     <record id="view_order_form_kpi_dashboard" model="ir.ui.view">
         <field name="name">sale.order.form.kpi.dashboard</field>
         <field name="model">sale.order</field>
@@ -11,11 +11,17 @@
         <field name="priority">70</field>
         <field name="arch" type="xml">
 
-            <xpath expr="//page[@name='order_lines']" position="inside">
-                <div class="mt-4 pt-3 border-top">
-                    <div class="h3 mb-3 text-muted ps-2">Análisis de Rendimiento (KPIs)</div>
-                    <field name="kpi_dashboard_data" widget="sale_kpi_dashboard" nolabel="1"/>
-                </div>
+            <xpath expr="//form/sheet/notebook" position="inside">
+                <page name="kpi_dashboard_page" string="KPIs">
+                    <group col="1">
+                        <div class="mt-4 pt-3 border-top">
+                            <div class="h3 mb-3 text-muted ps-2">
+                                Análisis de Rendimiento (KPIs)
+                            </div>
+                            <field name="kpi_dashboard_data" widget="sale_kpi_dashboard" nolabel="1"/>
+                        </div>
+                    </group>
+                </page>
             </xpath>
 
         </field>
