@@ -1,4 +1,7 @@
 from odoo import models, fields, api
+from odoo.addons.sale_order_kpi_dashboard.models.som_date_format import (
+    som_format_date,
+)
 from datetime import timedelta
 import json
 
@@ -141,7 +144,7 @@ class SaleOrder(models.Model):
                     )
                     payments_data.append({
                         'id': pay.id,
-                        'date': pay.date.strftime('%d/%m/%Y') if pay.date else '',
+                        'date': som_format_date(pay.date, empty=''),
                         'name': pay.name or '',
                         'journal': pay.journal_id.name or '',
                         'amount': round(pay_amount_mxn, 2),
@@ -481,7 +484,7 @@ class SaleOrder(models.Model):
         remaining_days = max(remaining_days, 0)
 
         return {
-            'date_str': projected_date.strftime('%d/%m/%Y'),
+            'date_str': som_format_date(projected_date),
             'days': remaining_days,
         }
 
