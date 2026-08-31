@@ -177,9 +177,11 @@ class SaleOrder(models.Model):
 
         # ── Exposición del Cliente ────────────────────────────────
         partner = order.partner_id.commercial_partner_id or order.partner_id
+        # sudo salta las reglas de registro: acotar a la compañía de la orden.
         client_open_orders = self.env['sale.order'].sudo().search([
             ('partner_id.commercial_partner_id', '=', partner.id),
             ('state', 'in', ['sale', 'done']),
+            ('company_id', '=', company.id),
         ])
         client_exposure = 0.0
         for o in client_open_orders:
@@ -290,10 +292,13 @@ class SaleOrder(models.Model):
         details = []
 
         sudo_env = self.env['account.move'].sudo()
+        # Compañía de la orden: el riesgo se mide sobre SU contabilidad.
+        company = self[:1].company_id or self.env.company
         partner_sudo = partner.sudo()
 
         overdue_invoices = sudo_env.search([
             ('partner_id.commercial_partner_id', '=', partner.id),
+            ('company_id', '=', company.id),
             ('state', '=', 'posted'),
             ('move_type', '=', 'out_invoice'),
             ('payment_state', 'in', ['not_paid', 'partial']),
@@ -325,6 +330,7 @@ class SaleOrder(models.Model):
                 score -= 5
                 details.append(f"Promedio {avg_overdue:.0f} días de atraso")
 
+        partner_sudo = partner_sudo.with_company(company)
         credit_limit = partner_sudo.credit_limit if hasattr(partner_sudo, 'credit_limit') and partner_sudo.credit_limit else 0
         if credit_limit > 0:
             usage = exposure / credit_limit
@@ -342,6 +348,7 @@ class SaleOrder(models.Model):
         twelve_months_ago = fields.Date.today() - timedelta(days=365)
         paid_invoices = sudo_env.search([
             ('partner_id.commercial_partner_id', '=', partner.id),
+            ('company_id', '=', company.id),
             ('state', '=', 'posted'),
             ('move_type', '=', 'out_invoice'),
             ('payment_state', '=', 'paid'),
@@ -408,22 +415,27 @@ class SaleOrder(models.Model):
 
         sudo_quant = self.env['stock.quant'].sudo()
         sudo_sml = self.env['stock.move.line'].sudo()
+        # sudo salta las reglas: existencias y movimientos de la compañía de la orden.
+        company = self.company_id or self.env.company
 
         for lot in lot_ids:
             quants = sudo_quant.search([
                 ('lot_id', '=', lot.id),
                 ('location_id.usage', '=', 'internal'),
+                ('company_id', '=', company.id),
             ])
             current_qty = sum(quants.mapped('quantity'))
             outgoing = sudo_sml.search([
                 ('lot_id', '=', lot.id),
                 ('state', '=', 'done'),
                 ('move_id.picking_code', '=', 'outgoing'),
+                ('company_id', '=', company.id),
             ])
             incoming = sudo_sml.search([
                 ('lot_id', '=', lot.id),
                 ('state', '=', 'done'),
                 ('move_id.picking_code', '=', 'incoming'),
+                ('company_id', '=', company.id),
             ])
             original_qty = sum(incoming.mapped('quantity')) if incoming else current_qty + sum(outgoing.mapped('quantity'))
             total_original += original_qty
@@ -444,8 +456,10 @@ class SaleOrder(models.Model):
             return {'date_str': 'Cobrado', 'days': 0}
 
         twelve_months_ago = fields.Date.today() - timedelta(days=365)
+        company = self[:1].company_id or self.env.company
         paid_invoices = self.env['account.move'].sudo().search([
             ('partner_id.commercial_partner_id', '=', partner.id),
+            ('company_id', '=', company.id),
             ('state', '=', 'posted'),
             ('move_type', '=', 'out_invoice'),
             ('payment_state', '=', 'paid'),

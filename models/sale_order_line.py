@@ -15,7 +15,9 @@ class SaleOrderLine(models.Model):
         lines = super().create(vals_list)
         for line in lines:
             if not line.kpi_cost_price and line.product_id:
-                line.kpi_cost_price = line.product_id.standard_price or 0.0
+                # standard_price es company_dependent: leerlo con la compañía de la venta.
+                product = line.product_id.with_company(line.company_id or line.order_id.company_id)
+                line.kpi_cost_price = product.standard_price or 0.0
         return lines
 
     def write(self, vals):
@@ -23,7 +25,8 @@ class SaleOrderLine(models.Model):
         if 'product_id' in vals and 'kpi_cost_price' not in vals:
             for line in self:
                 if line.product_id and not line.kpi_cost_price:
+                    product = line.product_id.with_company(line.company_id or line.order_id.company_id)
                     super(SaleOrderLine, line).write({
-                        'kpi_cost_price': line.product_id.standard_price or 0.0
+                        'kpi_cost_price': product.standard_price or 0.0
                     })
         return res
